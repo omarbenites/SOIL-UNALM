@@ -1,0 +1,137 @@
+---
+title: "Exploracion de los datos de Suelo UNALM-2019"
+author: "Omar Benites"
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    theme: united
+    toc: yes
+    toc_depth: 3
+subtitle: '2007'
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+rm(list=ls())
+suppressWarnings("knitr")
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+## Introducción
+
+Actualmente existen miles de datos alojados en computadoras locales o personales que alamacenan información historica pero valiosa en el analisis de datos. En el presente trabajo vamos a recuperar la información alojada en cientos de archivos de excel del laboratorio de suelos de la UNALM.
+
+## Uso de librerias y scripts
+
+El primer paso consiste en cargar las librerias que nos serviran para procesar los datos de suelo, incluyendo el uso de scripts desarrollados espeficamente para estas tareas. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings("dplyr")
+suppressWarnings("ggplot2")
+suppressWarnings("readxl")
+suppressWarnings("doParallel")
+suppressWarnings("janitor")
+library(dplyr)
+library(RDCOMClient)
+library(stringr)
+library(ggplot2)
+library(clean)
+library(readxl)
+library(doParallel)
+library(janitor)
+source("R/convert-xls-xlsx.R") #convertir de xls a xlsx
+source("R/get_campos.R") #cargar metodos
+system("taskkill /f /im excel.exe") #cerrar los archivos de excel
+```
+
+## Configuración del directorio y lectura de archivos
+
+Los datos del laboratorio de suelo del año 2007 estan en formato **xls**, por lo tanto primero los transformamos a **xlsx**. Configuración del directorio.
+
+```{r}
+#Listamos archivos en el directorio
+archivos <- list.files("data/Caracterizacion2007/XLSX/", full.names = TRUE,pattern = ".xlsx")
+#Verificamos si hay archivos
+if(length(archivos)==0){
+  convert_xls_to_xlsx(in_folder = "D:/Github_Repos/SOIL-UNALM/data/Caracterización 2007/",
+                    out_folder = "D:/Github_Repos/SOIL-UNALM/data/Caracterización 2007/XLSX/")
+}
+```
+
+## Procamiento paralelo/multiple de los datos
+
+Dada la gran cantidad de datos, resulta necesario el uso de procesamiento paralelo para procesar la mayor cantidad de información en un menor tiempo. Para ello, hacemos uso de los nucleos disponibles de la PC local.
+
+```{r}
+detectCores()
+doParallel::registerDoParallel(4)
+```
+
+## Atributo: Solicitante
+
+Para ejemplificar la obtencion de datos, vamos a buscar el atributo *Solicitante*, 
+
+```{r echo=FALSE}
+sol <- foreach(i=1:length(archivos)) %dopar% {
+  out <- get_solicitante(archivos[i])
+  out
+}
+dtsol <- rbind_ldf(sol) #as.data.frame(do.call(rbind, sol), stringsAsFactors = FALSE)
+dtsol <- clean_dt(dtsol)
+head(dtsol)
+```
+
+## Frecuencia de los datos del solicitante
+
+```{r}
+freq(dtsol$etiqueta)
+```
+
+## Gráfico de barras de las frecuencias
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+g <- ggplot(dtsol, aes(x=etiqueta,fill=etiqueta)) + geom_bar() +
+      geom_text(stat='count', aes(label=..count..), vjust=-1)
+g
+```
+
+
+## Datos de departamentos
+
+```{r}
+dpto <- vector(mode = "list",length = length(archivos)) 
+dpto <- foreach(i=1:length(archivos)) %dopar% {
+  print(archivos[i])
+  out <- try({ get_departamento(archivos[i]) })
+  out
+}
+dtdpto <- data.table::rbindlist(dpto,fill = TRUE) #juntar tablas
+dtdpto <- as.data.frame(dtdpto, stringsAsFactors=FALSE)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+g <- ggplot(dtdpto, aes(x=etiqueta,fill=etiqueta)) + geom_bar() +
+      geom_text(stat='count', aes(label=..count..), vjust=-1)
+g
+```
+
+
+
+
+
+# Referencias
+
+
+- Project working directory https://community.rstudio.com/t/newly-setup-rstudio-project-working-directory/16886/6
+
+- Set directory in Rmarkdown https://philmikejones.me/tutorials/2015-05-20-set-root-directory-knitr/
+
+- Convert xlsx to xls https://indranilgayen.wordpress.com/2016/05/11/batch-convert-xls-to-xlsx-using-r/
+
+
+

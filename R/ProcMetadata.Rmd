@@ -1,0 +1,76 @@
+---
+title: 'Procesamiento de la metadata'
+subtitle: '2007'
+author: 'Omar Benites'
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output:
+  html_notebook:
+    theme: united
+    toc: true
+    toc_depth: 3
+---
+
+
+```{r setup, include=FALSE, echo=FALSE}
+rm(list=ls())
+suppressWarnings("knitr")
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Uso de librerias y scripts
+
+El primer paso consiste en cargar las librerias que nos serviran para procesar los datos de suelo, incluyendo el uso de scripts desarrollados espeficamente para estas tareas. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+suppressWarnings("dplyr")
+suppressWarnings("ggplot2")
+suppressWarnings("readxl")
+suppressWarnings("doParallel")
+suppressWarnings("janitor")
+library(dplyr)
+library(RDCOMClient)
+library(stringr)
+library(ggplot2)
+library(clean)
+library(readxl)
+library(doParallel)
+library(janitor)
+source("R/convert-xls-xlsx.R") #convertir de xls a xlsx
+source("R/get_campos.R") #cargar metodos
+system("taskkill /f /im excel.exe") #cerrar los archivos de excel
+```
+
+## Listar de archivos
+
+Los datos del laboratorio de suelo del año 2007 estan en formato **xls**, por lo tanto primero los transformamos a **xlsx**. Configuración del directorio.
+
+```{r}
+archivos <- list.files("data/Caracterizacion2007/XLSX/", full.names = TRUE,pattern = ".xlsx")
+```
+
+## Procamiento paralelo/multiple de los datos
+
+Dada la gran cantidad de datos, resulta necesario el uso de procesamiento paralelo para procesar la mayor cantidad de información en un menor tiempo. Para ello, hacemos uso de los nucleos disponibles de la PC local.
+
+```{r}
+doParallel::registerDoParallel(4)
+```
+
+
+## Extras las tablas de nutrientes
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ldpto <- foreach(i=1:length(archivos)) %dopar% {
+  out <- get_departamento(archivos[i])
+  out
+}
+names(ldpto) <- basename(archivos)
+```
+
+## Combinar las tablas de nutrientes
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+dtdpto <- data.table::rbindlist(ldpto,fill = TRUE)
+write.csv(dtdpto, "data/output/dtdpto.csv",row.names = FALSE)
+```
